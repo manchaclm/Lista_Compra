@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mi Compra Mercadona</title>
+    
+    <!-- Meta tags PWA para experiencia App Nativa en iOS y Android -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Mi Compra">
+    <meta name="theme-color" content="#059669">
+    <meta name="description" content="Lista de la compra inteligente con catálogo Mercadona, precios editables, cuenta final y tickets guardados.">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Comportamiento nativo móvil */
+        html, body {
+            overscroll-behavior-y: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        input, select, textarea {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        /* Áreas seguras para muescas (notch) y barra inferior iOS/Android */
+        .safe-top {
+            padding-top: max(0.75rem, env(safe-area-inset-top));
+        }
+        .safe-bottom {
+            padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+        }
+        .main-bottom-space {
+            padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+        }
+
+        /* Ocultar scrollbars en carruseles horizontales */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Feedback táctil nativo */
+        .native-tap {
+            transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .native-tap:active {
+            transform: scale(0.97);
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .card-animate {
+            animation: slideUpFade 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-100/90 text-slate-900 antialiased min-h-screen flex flex-col">
+
+    <!-- CABECERA SUPERIOR COMPACTA (ESTILO APP NATIVA) -->
+    <header class="sticky top-0 z-30 bg-emerald-600 text-white shadow-md safe-top">
+        <div class="max-w-2xl mx-auto px-4 pb-3">
+            <div class="flex items-center justify-between gap-2.5">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/20">
+                        <i data-lucide="shopping-bag" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h1 id="header-title" class="text-lg font-extrabold tracking-tight leading-none truncate">Despensa</h1>
+                        <p id="header-subtitle" class="text-xs text-emerald-100 font-medium mt-1 truncate">Marca con X para pasar al carro</p>
+                    </div>
+                </div>
+
+                <!-- Indicador rápido de suma y botón Añadir -->
+                <div class="flex items-center gap-2 shrink-0">
+                    <button 
+                        type="button"
+                        onclick="switchView('cart')" 
+                        aria-label="Ver total del carro"
+                        class="native-tap min-h-[48px] px-3 rounded-2xl bg-emerald-700/85 border border-emerald-500/60 flex flex-col items-end justify-center"
+                    >
+                        <span id="header-total-label" class="text-[10px] font-semibold uppercase tracking-wider text-emerald-200 leading-none">Total Carro</span>
+                        <span id="header-total-badge" class="text-sm font-extrabold tabular-nums text-white mt-0.5 leading-none">0,00 €</span>
+                    </button>
+
+                    <button 
+                        type="button"
+                        onclick="openAddModal()" 
+                        aria-label="Añadir nuevo producto"
+                        class="native-tap w-12 h-12 rounded-2xl bg-white text-emerald-700 shadow-sm flex items-center justify-center font-bold"
+                    >
+                        <i data-lucide="plus" class="w-6 h-6 stroke-[2.5]"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Buscador y Filtros (Visibles en Despensa y Carro) -->
+            <div id="search-filter-bar" class="mt-3 space-y-2.5">
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-700/70"></i>
+                    <input 
+                        type="search" 
+                        id="search-input" 
+                        placeholder="Buscar producto (ej. leche, pollo, pan...)" 
+                        oninput="handleSearch(this.value)"
+                        class="w-full h-12 pl-10 pr-11 rounded-2xl bg-white text-slate-900 placeholder-slate-400 text-sm font-medium shadow-inner outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                    <button 
+                        type="button"
+                        id="clear-search-btn" 
+                        onclick="clearSearch()" 
+                        aria-label="Limpiar búsqueda"
+                        class="hidden absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-700"
+                    >
+                        <i data-lucide="x-circle" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Carrusel horizontal de pasillos -->
+                <div id="category-pills" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                    <!-- Se renderiza por JS -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-1 max-w-2xl w-full mx-auto px-3 pt-3 main-bottom-space">
+        
+        <!-- VISTA 1: DESPENSA (CATÁLOGO COMPLETO CON MARCA 'X') -->
+        <section id="view-pantry" class="space-y-3">
+            <!-- Banner resumen rápido -->
+            <div class="flex items-center justify-between gap-2 px-1 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Catálogo por pasillos</span>
+                    <span id="pantry-selected-pill" class="hidden text-[11px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg">
+                        0 con X
+                    </span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="toggleAllCategories()" id="toggle-collapse-btn" class="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1.5 rounded-xl native-tap">
+                        Contraer todo
+                    </button>
+                    <span id="pantry-count-pill" class="text-xs font-extrabold bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-xl">0</span>
+                </div>
+            </div>
+
+            <div id="pantry-list-container" class="space-y-3">
+                <!-- Categorías y productos -->
+            </div>
+        </section>
+
+        <!-- VISTA 2: CARRO DE LA COMPRA (CUENTA FINAL, GUARDAR TICKET Y RESET) -->
+        <section id="view-cart" class="hidden space-y-3">
+            <!-- Tarjeta Resumen Cuenta Final y Estimación -->
+            <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-4 shadow-lg border border-slate-700/80 space-y-3.5">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">Cuenta final (marcado comprado)</span>
+                        <div class="flex items-baseline gap-2 mt-1 flex-wrap">
+                            <span id="cart-picked-total" class="text-3xl font-extrabold tabular-nums tracking-tight text-emerald-300">0,00 €</span>
+                            <span id="cart-picked-badge" class="text-xs font-bold text-emerald-200 bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 rounded-lg">0 / 0 marcados</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1 tabular-nums">
+                            Total estimado carro: <strong id="cart-estimated-total" class="text-slate-200">0,00 €</strong> · <span id="cart-units-badge">0 uds.</span>
+                        </p>
+                    </div>
+
+                    <button 
+                        type="button"
+                        onclick="openTicketsModal()" 
+                        class="native-tap min-h-[44px] px-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold flex items-center gap-1.5 shrink-0"
+                    >
+                        <i data-lucide="receipt-text" class="w-4 h-4 text-amber-400"></i>
+                        <span>Tickets (<span id="tickets-count-label">0</span>)</span>
+                    </button>
+                </div>
+
+                <!-- Botones principales: Guardar ticket y Reset -->
+                <div id="cart-action-buttons" class="grid grid-cols-2 gap-2.5 pt-1">
+                    <button 
+                        type="button"
+                        id="save-ticket-btn"
+                        onclick="saveCurrentTicket()" 
+                        class="native-tap min-h-[48px] px-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm"
+                    >
+                        <i data-lucide="save" class="w-4 h-4 stroke-[2.5]"></i>
+                        <span>Guardar ticket</span>
+                    </button>
+
+                    <button 
+                        type="button"
+                        id="reset-shopping-btn"
+                        onclick="confirmResetShopping()" 
+                        class="native-tap min-h-[48px] px-3.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-200 text-xs font-extrabold flex items-center justify-center gap-2"
+                    >
+                        <i data-lucide="rotate-ccw" class="w-4 h-4 stroke-[2.5]"></i>
+                        <span>Reset</span>
+                    </button>
+                </div>
+
+                <!-- Interruptor rápido Modo Supermercado (Pantalla encendida) -->
+                <div class="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <i data-lucide="sun" id="wakelock-icon" class="w-4 h-4 text-slate-400 shrink-0"></i>
+                        <span class="text-xs text-slate-300 font-medium truncate">Mantener pantalla encendida</span>
+                    </div>
+                    <button 
+                        type="button"
+                        role="switch"
+                        aria-checked="false"
+                        id="wakelock-toggle-btn"
+                        onclick="toggleWakeLock()"
+                        class="native-tap min-h-[36px] px-3 rounded-xl text-xs font-bold bg-white/10 text-slate-300 border border-white/15 transition-colors"
+                    >
+                        Desactivado
+                    </button>
+                </div>
+            </div>
+
+            <div id="cart-list-container" class="space-y-3">
+                <!-- Productos en el carro agrupados por pasillo -->
+            </div>
+        </section>
+
+        <!-- VISTA 3: AJUSTES, TICKETS E INSTALAR APP -->
+        <section id="view-settings" class="hidden space-y-4">
+            
+            <!-- Tarjeta Historial de Tickets Guardados -->
+            <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/80 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                            <i data-lucide="receipt-text" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-base font-extrabold text-slate-900">Tickets guardados</h2>
+                            <p class="text-xs text-slate-500">Consulta o descarga tus compras con fecha</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="openTicketsModal()" class="native-tap min-h-[40px] px-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                        Ver todos (<span id="settings-tickets-count">0</span>)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tarjeta Instalación PWA -->
+            <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/80 space-y-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <i data-lucide="smartphone" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-extrabold text-slate-900">Instalar en el móvil</h2>
+                        <p class="text-xs text-slate-500">Úsala a pantalla completa sin barras del navegador</p>
+                    </div>
+                </div>
+
+                <!-- Botón nativo de instalación si Chrome/Android lo ofrece -->
+                <div id="pwa-install-banner" class="hidden">
+                    <button type="button" onclick="triggerPwaInstall()" class="native-tap w-full min-h-[50px] rounded-2xl bg-emerald-600 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2">
+                        <i data-lucide="download" class="w-5 h-5"></i>
+                        <span>Instalar App ahora</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
+                        <div class="flex items-center gap-2 font-bold text-xs text-slate-800 mb-1.5">
+                            <span class="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[10px]">A</span>
+                            <span>Android (Chrome)</span>
+                        </div>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            Pulsa el icono <strong>⋮</strong> arriba a la derecha y elige <strong>"Instalar aplicación"</strong> o <strong>"Añadir a pantalla de inicio"</strong>.
+                        </p>
+                    </div>
+
+                    <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
+                        <div class="flex items-center gap-2 font-bold text-xs text-slate-800 mb-1.5">
+                            <span class="w-5 h-5 rounded-md bg-slate-800 text-white flex items-center justify-center text-[10px]">iOS</span>
+                            <span>iPhone / iPad (Safari)</span>
+                        </div>
+                        <p class="text-xs text-slate-600 leading-relaxed">
+                            Pulsa el botón <strong>Compartir</strong> (cuadrado con flecha hacia arriba) y selecciona <strong>"Añadir a pantalla de inicio"</strong>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarjeta Acciones de Catálogo y Copia de Seguridad -->
+            <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/80 space-y-2.5">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 px-1">Gestión de datos y precios</h3>
+
+                <button type="button" onclick="openAddModal()" class="native-tap w-full min-h-[52px] px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-900 font-bold text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-3">
+                        <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
+                        <span>Añadir nuevo producto</span>
+                    </span>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-emerald-600"></i>
+                </button>
+
+                <button type="button" onclick="exportBackupJSON()" class="native-tap w-full min-h-[52px] px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-3">
+                        <i data-lucide="download" class="w-5 h-5 text-blue-600"></i>
+                        <span>Exportar copia de seguridad (JSON)</span>
+                    </span>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+                </button>
+
+                <label class="native-tap w-full min-h-[52px] px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 font-semibold text-sm flex items-center justify-between cursor-pointer">
+                    <span class="flex items-center gap-3">
+                        <i data-lucide="upload" class="w-5 h-5 text-indigo-600"></i>
+                        <span>Importar copia de seguridad (JSON)</span>
+                    </span>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+                    <input type="file" accept=".json,application/json" onchange="importBackupJSON(event)" class="hidden">
+                </label>
+
+                <div class="my-2 border-t border-slate-100"></div>
+
+                <button type="button" onclick="confirmRestorePrices()" class="native-tap w-full min-h-[52px] px-4 rounded-2xl bg-amber-50/80 hover:bg-amber-100/80 text-amber-900 font-semibold text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-3">
+                        <i data-lucide="tag" class="w-5 h-5 text-amber-600"></i>
+                        <span>Restaurar precios originales de tickets</span>
+                    </span>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-amber-500"></i>
+                </button>
+
+                <button type="button" onclick="confirmResetApp()" class="native-tap w-full min-h-[52px] px-4 rounded-2xl bg-rose-50/80 hover:bg-rose-100/80 text-rose-800 font-semibold text-sm flex items-center justify-between">
+                    <span class="flex items-center gap-3">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5 text-rose-600"></i>
+                        <span>Restaurar aplicación de fábrica</span>
+                    </span>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-rose-500"></i>
+                </button>
+            </div>
+
+            <p class="text-center text-[11px] text-slate-400 font-medium pb-2">
+                Catálogo extraído de tus tickets de Mercadona · Guardado automático local
+            </p>
+        </section>
+
+    </main>
+
+    <!-- BARRA DE NAVEGACIÓN INFERIOR FIJA (BOTTOM TAB BAR ESTILO NATIVO) -->
+    <nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] safe-bottom" aria-label="Navegación principal">
+        <div class="max-w-2xl mx-auto grid grid-cols-3 gap-1 px-2 pt-1.5">
+            
+            <!-- Tab 1: Despensa -->
+            <button 
+                type="button"
+                id="nav-pantry" 
+                onclick="switchView('pantry')" 
+                class="native-tap min-h-[54px] rounded-2xl flex flex-col items-center justify-center gap-0.5 text-emerald-700 bg-emerald-50/90 font-bold transition-colors"
+            >
+                <div class="relative">
+                    <i data-lucide="home" class="w-5 h-5"></i>
+                </div>
+                <span class="text-[11px] tracking-tight">Despensa</span>
+            </button>
+
+            <!-- Tab 2: Carro -->
+            <button 
+                type="button"
+                id="nav-cart" 
+                onclick="switchView('cart')" 
+                class="native-tap min-h-[54px] rounded-2xl flex flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 font-semibold transition-colors relative"
+            >
+                <div class="relative flex items-center justify-center">
+                    <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+                    <span id="nav-cart-badge" class="hidden absolute -top-2 -right-3.5 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center shadow-xs">
+                        0
+                    </span>
+                </div>
+                <span id="nav-cart-label" class="text-[11px] tracking-tight truncate max-w-[115px]">Carro · 0,00 €</span>
+            </button>
+
+            <!-- Tab 3: Ajustes / Instalar -->
+            <button 
+                type="button"
+                id="nav-settings" 
+                onclick="switchView('settings')" 
+                class="native-tap min-h-[54px] rounded-2xl flex flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 font-semibold transition-colors"
+            >
+                <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+                <span class="text-[11px] tracking-tight">Ajustes / App</span>
+            </button>
+
+        </div>
+    </nav>
+
+    <!-- TOAST DE FEEDBACK -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-200 opacity-0 -translate-y-2">
+        <div class="bg-slate-900/95 backdrop-blur-xs text-white px-4 py-2.5 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold whitespace-nowrap border border-white/10">
+            <span id="toast-icon" class="text-emerald-400 flex items-center">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            </span>
+            <span id="toast-text">Listo</span>
+        </div>
+    </div>
+
+    <!-- MODAL AÑADIR NUEVO PRODUCTO -->
+    <div id="add-modal" onclick="closeAddModal()" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl safe-bottom" onclick="event.stopPropagation()">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3 sm:hidden"></div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-extrabold text-slate-900">Añadir producto</h3>
+                <button type="button" onclick="closeAddModal()" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleAddProduct(event)" class="space-y-4">
+                <div>
+                    <label for="new-name" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Nombre del producto</label>
+                    <input type="text" id="new-name" required placeholder="Ej. Aceite de oliva virgen 1L" class="w-full h-12 px-3.5 rounded-2xl border border-slate-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20 outline-none text-sm font-semibold">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="new-cat" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Pasillo</label>
+                        <select id="new-cat" class="w-full h-12 px-3 rounded-2xl border border-slate-200 bg-white focus:border-emerald-600 outline-none text-sm font-semibold"></select>
+                    </div>
+                    <div>
+                        <label for="new-price" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Precio (€)</label>
+                        <div class="relative">
+                            <input type="text" inputmode="decimal" id="new-price" placeholder="0,00" class="w-full h-12 pl-3.5 pr-8 rounded-2xl border border-slate-200 focus:border-emerald-600 outline-none text-sm font-bold tabular-nums">
+                            <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">€</span>
+                        </div>
+                    </div>
+                </div>
+
+                <label class="flex items-center gap-3 p-3 rounded-2xl bg-rose-50/70 border border-rose-200/80 cursor-pointer">
+                    <input type="checkbox" id="new-tocart" checked class="w-5 h-5 rounded text-rose-600 focus:ring-rose-500">
+                    <span class="text-sm font-semibold text-slate-800">Marcar con X y meter en el carro</span>
+                </label>
+
+                <div class="grid grid-cols-2 gap-2.5 pt-1">
+                    <button type="button" onclick="closeAddModal()" class="native-tap min-h-[50px] rounded-2xl border border-slate-200 text-slate-700 font-bold text-sm">Cancelar</button>
+                    <button type="submit" class="native-tap min-h-[50px] rounded-2xl bg-emerald-600 text-white font-bold text-sm shadow-sm">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL TICKETS GUARDADOS CON FECHA -->
+    <div id="tickets-modal" onclick="closeTicketsModal()" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center">
+        <div class="bg-white w-full max-w-lg max-h-[86vh] rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl safe-bottom flex flex-col" onclick="event.stopPropagation()">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3 sm:hidden shrink-0"></div>
+            <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                        <i data-lucide="receipt-text" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-extrabold text-slate-900">Tickets guardados</h3>
+                        <p class="text-xs text-slate-500">Historial con fecha y hora de compra</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="exportAllTicketsJSON()" title="Exportar todos los tickets" aria-label="Exportar tickets" class="native-tap w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" onclick="closeTicketsModal()" aria-label="Cerrar tickets" class="native-tap w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="tickets-modal-body" class="overflow-y-auto space-y-3 py-3 flex-1">
+                <!-- Se renderiza por JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMACIÓN -->
+    <div id="confirm-modal" onclick="closeConfirmModal()" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900">¿Confirmar acción?</h3>
+            <p id="confirm-desc" class="text-xs text-slate-500 mt-1 mb-5 leading-relaxed">Descripción de la acción.</p>
+            <div class="grid grid-cols-2 gap-2.5">
+                <button type="button" onclick="closeConfirmModal()" class="native-tap min-h-[48px] rounded-2xl border border-slate-200 text-slate-700 font-bold text-sm">Cancelar</button>
+                <button type="button" id="confirm-ok-btn" class="native-tap min-h-[48px] rounded-2xl bg-amber-600 text-white font-bold text-sm">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // 1. MANIFEST PWA DINÁMICO (PARA INSTALAR COMO APP NATIVA EN MÓVIL)
+        // =========================================================================
+        (function setupDynamicPWAManifest() {
+            const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#059669"/><path d="M160 192h192l-18 192H178l-18-192zm48-32a48 48 0 0 1 96 0" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/><circle cx="216" cy="264" r="14" fill="#fbbf24"/><circle cx="296" cy="264" r="14" fill="#fbbf24"/></svg>`;
+            const iconUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgIcon);
+
+            const appleLink = document.createElement('link');
+            appleLink.rel = 'apple-touch-icon';
+            appleLink.href = iconUrl;
+            document.head.appendChild(appleLink);
+
+            const manifest = {
+                name: 'Mi Compra Mercadona',
+                short_name: 'Mi Compra',
+                description: 'Lista de la compra móvil con catálogo Mercadona, precios editables y tickets.',
+                start_url: location.href,
+                display: 'standalone',
+                orientation: 'portrait',
+                background_color: '#f1f5f9',
+                theme_color: '#059669',
+                icons: [
+                    { src: iconUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+                    { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+                ]
+            };
+
+            try {
+                const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+                const manifestLink = document.createElement('link');
+                manifestLink.rel = 'manifest';
+                manifestLink.href = URL.createObjectURL(blob);
+                document.head.appendChild(manifestLink);
+            } catch (e) {
+                console.warn('No se pudo registrar el manifest Blob:', e);
+            }
+        })();
+
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const banner = document.getElementById('pwa-install-banner');
+            if (banner) banner.classList.remove('hidden');
+        });
+
+        async function triggerPwaInstall() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                document.getElementById('pwa-install-banner').classList.add('hidden');
+                showToast('¡App instalada en tu pantalla de inicio!');
+            }
+            deferredPrompt = null;
+        }
+
+        // =========================================================================
+        // 2. FEEDBACK HÁPTICO Y WAKE LOCK API (MANTENER PANTALLA ENCENDIDA)
+        // =========================================================================
+        function triggerHaptic(pattern = 15) {
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                try { navigator.vibrate(pattern); } catch (_) {}
+            }
+        }
+
+        let wakeLockSentinel = null;
+        async function toggleWakeLock() {
+            triggerHaptic(20);
+            const btn = document.getElementById('wakelock-toggle-btn');
+            const icon = document.getElementById('wakelock-icon');
+
+            if (!('wakeLock' in navigator)) {
+                showToast('Tu navegador no soporta bloqueo de pantalla', 'warn');
+                return;
+            }
+
+            if (wakeLockSentinel) {
+                try {
+                    await wakeLockSentinel.release();
+                    wakeLockSentinel = null;
+                } catch (_) {}
+                btn.textContent = 'Desactivado';
+                btn.setAttribute('aria-checked', 'false');
+                btn.className = 'native-tap min-h-[36px] px-3 rounded-xl text-xs font-bold bg-white/10 text-slate-300 border border-white/15 transition-colors';
+                icon.className = 'w-4 h-4 text-slate-400 shrink-0';
+                showToast('Pantalla en modo normal');
+            } else {
+                try {
+                    wakeLockSentinel = await navigator.wakeLock.request('screen');
+                    btn.textContent = 'Activado';
+                    btn.setAttribute('aria-checked', 'true');
+                    btn.className = 'native-tap min-h-[36px] px-3 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 border border-emerald-400 transition-colors';
+                    icon.className = 'w-4 h-4 text-amber-400 shrink-0';
+                    showToast('Pantalla siempre encendida activada');
+
+                    wakeLockSentinel.addEventListener('release', () => {
+                        wakeLockSentinel = null;
+                        btn.textContent = 'Desactivado';
+                        btn.setAttribute('aria-checked', 'false');
+                        btn.className = 'native-tap min-h-[36px] px-3 rounded-xl text-xs font-bold bg-white/10 text-slate-300 border border-white/15 transition-colors';
+                        icon.className = 'w-4 h-4 text-slate-400 shrink-0';
+                    });
+                } catch (err) {
+                    showToast('No se pudo activar pantalla encendida', 'warn');
+                }
+            }
+        }
+
+        // =========================================================================
+        // 3. LOS 10 PASILLOS Y TODOS LOS PRODUCTOS ÚNICOS DE LOS 4 TICKETS
+        // =========================================================================
+        const CATEGORIES = [
+            { id: 'frutas', name: '1. Frutas y Verduras', short: 'Frutas/Verd.', icon: 'carrot', color: 'text-emerald-600', bg: 'bg-emerald-100' },
+            { id: 'carniceria', name: '2. Carnicería y Charcutería', short: 'Carnicería', icon: 'beef', color: 'text-rose-600', bg: 'bg-rose-100' },
+            { id: 'pescaderia', name: '3. Pescadería y Congelados', short: 'Pescado/Cong.', icon: 'fish', color: 'text-sky-600', bg: 'bg-sky-100' },
+            { id: 'lacteos', name: '4. Lácteos y Huevos', short: 'Lácteos', icon: 'egg', color: 'text-amber-600', bg: 'bg-amber-100' },
+            { id: 'panaderia', name: '5. Panadería y Dulces', short: 'Pan/Dulces', icon: 'croissant', color: 'text-orange-600', bg: 'bg-orange-100' },
+            { id: 'bebidas', name: '6. Bebidas', short: 'Bebidas', icon: 'wine', color: 'text-purple-600', bg: 'bg-purple-100' },
+            { id: 'despensa', name: '7. Despensa y Conservas', short: 'Despensa', icon: 'package', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+            { id: 'aperitivos', name: '8. Aperitivos y Frutos Secos', short: 'Aperitivos', icon: 'pizza', color: 'text-red-600', bg: 'bg-red-100' },
+            { id: 'limpieza', name: '9. Limpieza y Hogar', short: 'Limpieza', icon: 'sparkles', color: 'text-blue-600', bg: 'bg-blue-100' },
+            { id: 'higiene', name: '10. Higiene y Salud', short: 'Higiene', icon: 'heart-pulse', color: 'text-teal-600', bg: 'bg-teal-100' }
+        ];
+
+        const INITIAL_CATALOG = {
+            frutas: [
+                { name: "Tomate pera", price: 0.83 },
+                { name: "Calabacín verde", price: 1.44 },
+                { name: "Pimiento rojo", price: 0.71 },
+                { name: "Pimiento freír", price: 0.73 },
+                { name: "Coliflor", price: 2.04 },
+                { name: "Zanahoria bolsa", price: 1.15 },
+                { name: "Zanahoria 500g", price: 0.80 },
+                { name: "Zanahoria rallada", price: 0.94 },
+                { name: "Iceberg", price: 1.03 },
+                { name: "Pepino", price: 0.77 },
+                { name: "Limón", price: 0.89 },
+                { name: "Manzana golden", price: 1.24 },
+                { name: "Naranja", price: 2.33 },
+                { name: "Kiwi verde", price: 2.74 },
+                { name: "Kaki", price: 1.51 },
+                { name: "Brócoli", price: 1.80 },
+                { name: "Apio verde", price: 0.82 },
+                { name: "Cebollino", price: 1.80 },
+                { name: "Calabaza trozos", price: 2.09 },
+                { name: "Ajo seco 250g", price: 1.85 }
+            ],
+            carniceria: [
+                { name: "Pollo entero limpio", price: 6.07 },
+                { name: "Jamoncitos de pollo", price: 3.30 },
+                { name: "Costilla churrasco", price: 5.32 },
+                { name: "Burger M Va/Ce 500g", price: 4.30 },
+                { name: "Solomillo marin cong", price: 5.52 },
+                { name: "Alas congeladas", price: 3.60 },
+                { name: "Pollo relleno asado", price: 2.40 },
+                { name: "C Pollo Ter FY V", price: 6.00 },
+                { name: "Jamón S. Extra Fino", price: 2.45 },
+                { name: "Bacon lonchas", price: 2.30 },
+                { name: "Maxi York lonchas", price: 2.40 },
+                { name: "Mini taquitos jamón", price: 2.65 },
+                { name: "Lomo asado lonchas", price: 2.60 },
+                { name: "Chorizo Pamplona", price: 2.05 },
+                { name: "Chorizo oreado", price: 2.66 },
+                { name: "Fuet Espetec Extra", price: 2.57 },
+                { name: "Salch Frankfurt Ques", price: 1.85 },
+                { name: "P. Pav Red. Sal Bipa", price: 3.95 }
+            ],
+            pescaderia: [
+                { name: "Salmón ahumado", price: 3.46 },
+                { name: "Boq al vinagre", price: 5.60 },
+                { name: "Delicias mar", price: 2.00 },
+                { name: "Filete merluza cabo", price: 5.20 },
+                { name: "Carne de mejillón", price: 2.35 },
+                { name: "Empanadillas atún", price: 1.90 },
+                { name: "Lasaña atún", price: 3.66 },
+                { name: "Croqueta jamón", price: 1.40 },
+                { name: "Helado stracciatella", price: 3.25 },
+                { name: "Helado sandwich nata", price: 1.85 },
+                { name: "Hielo cubito 2kg", price: 1.00 }
+            ],
+            lacteos: [
+                { name: "Leche entera", price: 0.97 },
+                { name: "Leche semi calcio", price: 1.05 },
+                { name: "12 Huevos medianos-M", price: 2.85 },
+                { name: "Q rallado fundir", price: 2.40 },
+                { name: "Q semi mezcla", price: 4.15 },
+                { name: "Yog 0%0% fresa", price: 0.90 },
+                { name: "Yog 0%0% limón", price: 0.90 },
+                { name: "Natillas vainilla", price: 1.05 },
+                { name: "Levadura fresca", price: 0.50 }
+            ],
+            panaderia: [
+                { name: "Barra de pan", price: 0.50 },
+                { name: "Barra de pan 3 uds", price: 1.19 },
+                { name: "Barra campesina", price: 0.65 },
+                { name: "Pan de leche", price: 1.80 },
+                { name: "Pan hot dog", price: 0.90 },
+                { name: "Pan semillas", price: 1.50 },
+                { name: "Pan blanco familiar", price: 1.18 },
+                { name: "Croissant cacao", price: 1.75 },
+                { name: "Crepes rell choco", price: 1.45 },
+                { name: "Tartaletes fresa", price: 1.05 },
+                { name: "Gall digestive avena", price: 1.00 },
+                { name: "Marias doradas", price: 1.40 },
+                { name: "Avena crunchy", price: 1.90 },
+                { name: "Muesli frutos secos", price: 2.10 },
+                { name: "Crema cacao 1 sabor", price: 2.05 },
+                { name: "Chicle hierba lámina", price: 1.00 },
+                { name: "Caramelo nata s/azuc", price: 1.15 },
+                { name: "Caramelos lima 0%", price: 1.50 }
+            ],
+            bebidas: [
+                { name: "Aguadoy P-6x500ml", price: 1.44 },
+                { name: "Cola Zero 2L", price: 0.75 },
+                { name: "Coca Cola Zero 4L", price: 4.00 },
+                { name: "Fanta naranja 4L", price: 3.00 },
+                { name: "Sunny Florida 1,25L", price: 1.50 },
+                { name: "Iso limón zero", price: 1.00 },
+                { name: "Isotónico limón", price: 1.00 },
+                { name: "Cerveza clasica lata", price: 3.72 },
+                { name: "La Mancha tinto", price: 1.30 },
+                { name: "Scotch whisky", price: 6.15 },
+                { name: "Vino blanco brick", price: 0.90 }
+            ],
+            despensa: [
+                { name: "Atún claro giras PK6", price: 4.30 },
+                { name: "Atún claro giras PK3", price: 2.70 },
+                { name: "Piña s/az añadido", price: 1.00 },
+                { name: "Piña s/az añadido P6", price: 1.50 },
+                { name: "Mayonesa 500ml", price: 1.20 },
+                { name: "Tomate triturado", price: 0.98 },
+                { name: "Tom. receta artesana", price: 2.00 },
+                { name: "Salsa de soja salada", price: 1.25 },
+                { name: "Salsa piri piri", price: 1.00 },
+                { name: "Harina de trigo", price: 0.72 },
+                { name: "Spaghetti", price: 1.20 },
+                { name: "Fideo cabello", price: 0.80 },
+                { name: "Pre.paella/sop", price: 4.10 },
+                { name: "Sal fina", price: 0.40 },
+                { name: "Cominos molidos", price: 1.20 },
+                { name: "Café descafeinado", price: 0.75 },
+                { name: "Café soluble descaf", price: 3.15 }
+            ],
+            aperitivos: [
+                { name: "Pat. classicas", price: 1.90 },
+                { name: "Cocktail natural", price: 2.80 },
+                { name: "Almendra natural", price: 2.50 },
+                { name: "Pipa gigante aguasal", price: 1.20 },
+                { name: "Galletitas saladas", price: 1.20 },
+                { name: "Maxi hamburguesa", price: 0.85 },
+                { name: "Pizzas jamon+queso P", price: 2.90 }
+            ],
+            limpieza: [
+                { name: "Higienico doble roll", price: 2.30 },
+                { name: "200 servil. blancas", price: 1.25 },
+                { name: "Papel vegetal 30h", price: 1.70 },
+                { name: "Detergente Marsella", price: 3.40 },
+                { name: "Lavavajillas fresh", price: 5.85 },
+                { name: "Lavavajillas ultra", price: 2.00 },
+                { name: "Abrillantador vajill", price: 1.20 },
+                { name: "Lejia normal", price: 0.80 },
+                { name: "Absorbeolor ropa lim", price: 0.80 },
+                { name: "Guantes nitrilo M.", price: 2.85 },
+                { name: "Rodillo quitapelusas", price: 1.75 },
+                { name: "Palo antideslizante", price: 1.75 },
+                { name: "Arena de gatos", price: 1.50 }
+            ],
+            higiene: [
+                { name: "Gel frutal", price: 1.05 },
+                { name: "Fresh gel", price: 1.10 },
+                { name: "Serum Liss & Frizz", price: 3.50 },
+                { name: "Locion reafirmante", price: 5.30 },
+                { name: "Colg. triple accion", price: 1.95 },
+                { name: "Total action enj.", price: 1.35 },
+                { name: "Explosion action enj", price: 1.35 },
+                { name: "Pañuelos 4 cap 10x10", price: 1.05 },
+                { name: "Toall.bebe fresc.80", price: 1.05 },
+                { name: "Polvo desod pies", price: 2.00 },
+                { name: "Esparadrapo textil", price: 1.40 }
+            ]
+        };
+
+        // =========================================================================
+        // 4. ESTADO Y PERSISTENCIA EN LOCALSTORAGE
+        // =========================================================================
+        const STORAGE_KEY = 'mercadona_pwa_v4';
+
+        let state = {
+            products: [],
+            tickets: [],
+            currentView: 'pantry', // 'pantry' | 'cart' | 'settings'
+            searchQuery: '',
+            selectedCategory: 'all',
+            collapsed: {},
+            editingPriceId: null
+        };
+
+        function formatEuro(num) {
+            return (Number(num) || 0).toLocaleString('es-ES', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' €';
+        }
+
+        function parseEuro(val) {
+            if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, Math.round(val * 100) / 100);
+            const clean = String(val || '').replace(/[^\d.,]/g, '').replace(',', '.');
+            const parsed = parseFloat(clean);
+            return isNaN(parsed) ? 0 : Math.max(0, Math.round(parsed * 100) / 100);
+        }
+
+        function createDefaultProducts() {
+            const items = [];
+            let idx = 1;
+            for (const [catId, list] of Object.entries(INITIAL_CATALOG)) {
+                list.forEach(entry => {
+                    items.push({
+                        id: `item_${idx++}`,
+                        name: entry.name,
+                        category: catId,
+                        price: entry.price,
+                        defaultPrice: entry.price,
+                        quantity: 1,
+                        inCart: false,
+                        picked: false,
+                        isCustom: false
+                    });
+                });
+            }
+            return items;
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const data = JSON.parse(raw);
+                    if (Array.isArray(data.products) && data.products.length > 0) {
+                        state.products = data.products.map(p => ({
+                            ...p,
+                            quantity: Math.max(1, Number(p.quantity) || 1),
+                            inCart: !!p.inCart,
+                            picked: !!p.picked
+                        }));
+                        state.collapsed = data.collapsed || {};
+                        state.tickets = Array.isArray(data.tickets) ? data.tickets : [];
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error('Error cargando datos:', e);
+            }
+            state.products = createDefaultProducts();
+            state.tickets = [];
+            saveState();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    products: state.products,
+                    collapsed: state.collapsed,
+                    tickets: state.tickets
+                }));
+            } catch (e) {
+                console.error('Error guardando datos:', e);
+            }
+        }
+
+        // =========================================================================
+        // 5. LÓGICA DE DESPENSA (MARCA 'X'), CARRO ('picked') Y TICKETS
+        // =========================================================================
+
+        /**
+         * En la Despensa:
+         * - Al pulsar un producto, permanece en la despensa y se marca/desmarca con una 'X'.
+         * - Si se marca con 'X', pasa al carro (`inCart = true`, `picked = false`, `quantity = 1`).
+         * - Si se desmarca la 'X', desaparece del carro (`inCart = false`, `picked = false`).
+         */
+        function togglePantrySelection(id) {
+            if (state.editingPriceId) return;
+
+            const prod = state.products.find(p => p.id === id);
+            if (!prod) return;
+
+            triggerHaptic(18);
+            prod.inCart = !prod.inCart;
+            prod.quantity = 1;
+            if (!prod.inCart) {
+                prod.picked = false;
+            }
+
+            saveState();
+            renderAll();
+
+            if (prod.inCart) {
+                showToast(`✕ ${prod.name} añadido al carro`, 'cart');
+            } else {
+                showToast(`Quitado del carro: ${prod.name}`, 'check');
+            }
+        }
+
+        /**
+         * En el Carro:
+         * - Al pulsar un producto como comprado ('picked'), NO desaparece del carro.
+         * - Se marca/desmarca como comprado y se suma/resta en la cuenta final.
+         */
+        function toggleCartPicked(id) {
+            if (state.editingPriceId) return;
+
+            const prod = state.products.find(p => p.id === id);
+            if (!prod || !prod.inCart) return;
+
+            triggerHaptic(16);
+            prod.picked = !prod.picked;
+
+            const lineTotal = prod.price * (prod.quantity || 1);
+            saveState();
+            renderAll();
+
+            if (prod.picked) {
+                showToast(`✓ +${formatEuro(lineTotal)} en cuenta final`, 'check');
+            } else {
+                showToast(`-${formatEuro(lineTotal)} quitado de cuenta final`, 'tag');
+            }
+        }
+
+        function changeQuantity(event, id, delta) {
+            event.stopPropagation();
+            const prod = state.products.find(p => p.id === id);
+            if (!prod) return;
+
+            triggerHaptic(12);
+            const nextQty = (prod.quantity || 1) + delta;
+            if (nextQty <= 0) {
+                prod.inCart = false;
+                prod.picked = false;
+                prod.quantity = 1;
+                showToast(`Quitado del carro: ${prod.name}`, 'check');
+            } else {
+                prod.quantity = nextQty;
+            }
+
+            saveState();
+            renderAll();
+        }
+
+        // Edición INLINE de precio con teclado decimal nativo
+        function startInlinePriceEdit(event, id) {
+            event.stopPropagation();
+            triggerHaptic(10);
+            state.editingPriceId = id;
+            renderAll();
+
+            setTimeout(() => {
+                const input = document.getElementById(`inline-price-${id}`);
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 30);
+        }
+
+        function commitInlinePriceEdit(id) {
+            if (state.editingPriceId !== id) return;
+            const input = document.getElementById(`inline-price-${id}`);
+            const prod = state.products.find(p => p.id === id);
+
+            if (input && prod) {
+                const newPrice = parseEuro(input.value);
+                if (Math.abs(newPrice - prod.price) > 0.001) {
+                    prod.price = newPrice;
+                    triggerHaptic([10, 30, 10]);
+                    showToast(`Precio actualizado: ${formatEuro(newPrice)}`, 'tag');
+                }
+            }
+
+            state.editingPriceId = null;
+            saveState();
+            renderAll();
+        }
+
+        function handleInlinePriceKey(event, id) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                commitInlinePriceEdit(id);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                state.editingPriceId = null;
+                renderAll();
+            }
+        }
+
+        function deleteCustomItem(event, id) {
+            event.stopPropagation();
+            const idx = state.products.findIndex(p => p.id === id);
+            if (idx !== -1) {
+                triggerHaptic(25);
+                const name = state.products[idx].name;
+                state.products.splice(idx, 1);
+                saveState();
+                renderAll();
+                showToast(`Eliminado: ${name}`, 'warn');
+            }
+        }
+
+        // Guardar ticket con fecha y hora
+        function saveCurrentTicket() {
+            const cartItems = state.products.filter(p => p.inCart);
+            if (cartItems.length === 0) {
+                showToast('No hay productos en el carro para guardar', 'warn');
+                return;
+            }
+
+            // Si hay productos marcados como comprados ('picked'), guardamos esos;
+            // si ninguno está marcado aún, guardamos los productos presentes en el carro.
+            const pickedItems = cartItems.filter(p => p.picked);
+            const itemsToSave = pickedItems.length > 0 ? pickedItems : cartItems;
+
+            const total = itemsToSave.reduce((sum, p) => sum + (p.price * (p.quantity || 1)), 0);
+            const units = itemsToSave.reduce((sum, p) => sum + (p.quantity || 1), 0);
+
+            const now = new Date();
+            const ticket = {
+                id: 'ticket_' + Date.now(),
+                createdAt: now.toISOString(),
+                dateLabel: now.toLocaleDateString('es-ES', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                }),
+                timeLabel: now.toLocaleTimeString('es-ES', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
+                onlyPicked: pickedItems.length > 0,
+                total,
+                units,
+                items: itemsToSave.map(p => ({
+                    name: p.name,
+                    category: p.category,
+                    price: p.price,
+                    quantity: p.quantity || 1,
+                    subtotal: Math.round(p.price * (p.quantity || 1) * 100) / 100
+                }))
+            };
+
+            state.tickets.unshift(ticket);
+            triggerHaptic([15, 30, 15]);
+            saveState();
+            updateSummaryMetrics();
+            showToast(`Ticket guardado (${formatEuro(total)})`, 'ticket');
+        }
+
+        // Botón Reset para volver al inicio tras terminar la compra
+        function confirmResetShopping() {
+            const activeCount = state.products.filter(p => p.inCart || p.picked).length;
+            if (activeCount === 0 && state.currentView === 'pantry') {
+                showToast('Ya está todo reseteado en la despensa', 'check');
+                return;
+            }
+
+            openConfirmModal(
+                '¿Resetear compra y volver al inicio?',
+                'Se quitarán todas las marcas X de la despensa, se limpiará el carro y volverás a la Despensa. Se conservan el catálogo y los tickets guardados.',
+                'Sí, Reset',
+                'bg-rose-600',
+                () => {
+                    state.products.forEach(p => {
+                        p.inCart = false;
+                        p.picked = false;
+                        p.quantity = 1;
+                    });
+                    state.searchQuery = '';
+                    state.selectedCategory = 'all';
+                    const searchInp = document.getElementById('search-input');
+                    if (searchInp) searchInp.value = '';
+                    document.getElementById('clear-search-btn').classList.add('hidden');
+
+                    saveState();
+                    renderCategoryPills();
+                    switchView('pantry');
+                    showToast('Compra reseteada · Listo para empezar', 'check');
+                }
+            );
+        }
+
+        function switchView(view) {
+            triggerHaptic(10);
+            state.currentView = view;
+            state.editingPriceId = null;
+
+            const views = ['pantry', 'cart', 'settings'];
+            views.forEach(v => {
+                const el = document.getElementById(`view-${v}`);
+                const nav = document.getElementById(`nav-${v}`);
+                if (v === view) {
+                    el.classList.remove('hidden');
+                    nav.className = 'native-tap min-h-[54px] rounded-2xl flex flex-col items-center justify-center gap-0.5 text-emerald-700 bg-emerald-50/90 font-bold transition-colors';
+                } else {
+                    el.classList.add('hidden');
+                    nav.className = 'native-tap min-h-[54px] rounded-2xl flex flex-col items-center justify-center gap-0.5 text-slate-500 hover:text-slate-900 font-semibold transition-colors relative';
+                }
+            });
+
+            const titleEl = document.getElementById('header-title');
+            const subEl = document.getElementById('header-subtitle');
+            const searchBar = document.getElementById('search-filter-bar');
+
+            if (view === 'pantry') {
+                titleEl.textContent = 'Despensa';
+                subEl.textContent = 'Marca con X para enviar al carro';
+                searchBar.classList.remove('hidden');
+            } else if (view === 'cart') {
+                titleEl.textContent = 'Carro de la Compra';
+                subEl.textContent = 'Marca cada producto al cogerlo para sumar';
+                searchBar.classList.remove('hidden');
+            } else {
+                titleEl.textContent = 'Ajustes e Instalar';
+                subEl.textContent = 'Tickets, copia de seguridad y App móvil';
+                searchBar.classList.add('hidden');
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            renderAll();
+        }
+
+        function handleSearch(val) {
+            state.searchQuery = val.trim();
+            document.getElementById('clear-search-btn').classList.toggle('hidden', !state.searchQuery);
+            renderAll();
+        }
+
+        function clearSearch() {
+            const inp = document.getElementById('search-input');
+            inp.value = '';
+            handleSearch('');
+            inp.focus();
+        }
+
+        function selectCategory(catId) {
+            triggerHaptic(10);
+            state.selectedCategory = catId;
+            renderCategoryPills();
+            renderAll();
+        }
+
+        function toggleCategoryCollapse(listType, catId) {
+            triggerHaptic(8);
+            const key = `${listType}_${catId}`;
+            state.collapsed[key] = !state.collapsed[key];
+            saveState();
+            renderAll();
+        }
+
+        function toggleAllCategories() {
+            triggerHaptic(12);
+            const anyExpanded = CATEGORIES.some(c => !state.collapsed[`pantry_${c.id}`]);
+            if (anyExpanded) {
+                CATEGORIES.forEach(c => state.collapsed[`pantry_${c.id}`] = true);
+            } else {
+                state.collapsed = {};
+            }
+            saveState();
+            renderAll();
+        }
+
+        // =========================================================================
+        // 6. RENDERIZADO DE UI
+        // =========================================================================
+        function normalize(str) {
+            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        }
+
+        function renderCategoryPills() {
+            const container = document.getElementById('category-pills');
+            const isAll = state.selectedCategory === 'all';
+
+            let html = `
+                <button 
+                    type="button"
+                    onclick="selectCategory('all')" 
+                    class="native-tap shrink-0 min-h-[36px] px-3.5 rounded-full text-xs font-bold transition-all ${isAll ? 'bg-amber-400 text-slate-950 shadow-xs' : 'bg-emerald-700/70 text-emerald-50 hover:bg-emerald-700'}"
+                >
+                    Todos (10)
+                </button>
+            `;
+
+            CATEGORIES.forEach(cat => {
+                const active = state.selectedCategory === cat.id;
+                html += `
+                    <button 
+                        type="button"
+                        onclick="selectCategory('${cat.id}')" 
+                        class="native-tap shrink-0 min-h-[36px] flex items-center gap-1.5 px-3.5 rounded-full text-xs font-bold transition-all ${active ? 'bg-amber-400 text-slate-950 shadow-xs' : 'bg-emerald-700/70 text-emerald-50 hover:bg-emerald-700'}"
+                    >
+                        <i data-lucide="${cat.icon}" class="w-3.5 h-3.5"></i>
+                        <span>${cat.short}</span>
+                    </button>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderProductsList(isCart) {
+            const container = document.getElementById(isCart ? 'cart-list-container' : 'pantry-list-container');
+            const listType = isCart ? 'cart' : 'pantry';
+
+            // En la despensa se muestran TODOS los productos (no desaparecen al marcar con X).
+            // En el carro se muestran únicamente los productos seleccionados (`inCart === true`).
+            let filtered = isCart
+                ? state.products.filter(p => p.inCart)
+                : [...state.products];
+
+            if (state.selectedCategory !== 'all') {
+                filtered = filtered.filter(p => p.category === state.selectedCategory);
+            }
+
+            if (state.searchQuery) {
+                const q = normalize(state.searchQuery);
+                filtered = filtered.filter(p => normalize(p.name).includes(q));
+            }
+
+            if (filtered.length === 0) {
+                if (state.searchQuery || state.selectedCategory !== 'all') {
+                    container.innerHTML = `
+                        <div class="bg-white rounded-3xl p-8 text-center border border-slate-200/80">
+                            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+                                <i data-lucide="search" class="w-6 h-6"></i>
+                            </div>
+                            <p class="text-sm font-bold text-slate-800">Sin resultados</p>
+                            <p class="text-xs text-slate-500 mt-1">No hay productos que coincidan con tu búsqueda o pasillo.</p>
+                        </div>
+                    `;
+                } else if (isCart) {
+                    container.innerHTML = `
+                        <div class="bg-white rounded-3xl p-10 text-center border border-slate-200/80">
+                            <div class="w-16 h-16 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-3">
+                                <i data-lucide="shopping-cart" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-extrabold text-slate-900">Tu carro está vacío</h3>
+                            <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                                Ve a <strong>Despensa</strong> y marca con <strong>X</strong> los productos que quieras añadir al carro.
+                            </p>
+                            <button type="button" onclick="switchView('pantry')" class="native-tap mt-4 min-h-[48px] px-5 rounded-2xl bg-emerald-600 text-white text-xs font-bold shadow-xs">
+                                Ir a Despensa
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="bg-white rounded-3xl p-10 text-center border border-slate-200/80">
+                            <p class="text-sm font-bold text-slate-800">Catálogo vacío</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            let html = '';
+            CATEGORIES.forEach(cat => {
+                const catProducts = filtered.filter(p => p.category === cat.id);
+                if (catProducts.length === 0) return;
+
+                const isCollapsed = !!state.collapsed[`${listType}_${cat.id}`] && !state.searchQuery;
+                const catSubtotal = catProducts.reduce((sum, p) => sum + (p.price * (isCart ? p.quantity : 1)), 0);
+                const catMarkedCount = catProducts.filter(p => isCart ? p.picked : p.inCart).length;
+
+                html += `
+                    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
+                        <button 
+                            type="button"
+                            onclick="toggleCategoryCollapse('${listType}', '${cat.id}')" 
+                            class="w-full min-h-[50px] px-3.5 py-2.5 flex items-center justify-between bg-slate-50/90 hover:bg-slate-100/80 text-left"
+                        >
+                            <div class="flex items-center gap-2.5 min-w-0">
+                                <span class="w-8 h-8 rounded-xl ${cat.bg} ${cat.color} flex items-center justify-center shrink-0">
+                                    <i data-lucide="${cat.icon}" class="w-4 h-4"></i>
+                                </span>
+                                <span class="font-extrabold text-sm text-slate-800 truncate">${cat.name}</span>
+                            </div>
+
+                            <div class="flex items-center gap-2 shrink-0 ml-2">
+                                ${!isCart && catMarkedCount > 0 ? `<span class="text-[11px] font-extrabold px-2 py-0.5 rounded-lg bg-rose-100 text-rose-700">${catMarkedCount} X</span>` : ''}
+                                ${isCart ? `<span class="text-xs font-extrabold text-amber-800 tabular-nums">${formatEuro(catSubtotal)}</span>` : ''}
+                                <span class="text-xs font-extrabold px-2 py-0.5 rounded-lg ${isCart ? 'bg-amber-100 text-amber-900' : 'bg-slate-200/80 text-slate-700'}">
+                                    ${catProducts.length}
+                                </span>
+                                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}"></i>
+                            </div>
+                        </button>
+
+                        <div class="${isCollapsed ? 'hidden' : 'divide-y divide-slate-100'}">
+                            ${catProducts.map(item => renderProductRow(item, isCart)).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderProductRow(item, isCart) {
+            const isEditing = state.editingPriceId === item.id;
+            const isModified = Math.abs(item.price - item.defaultPrice) > 0.001;
+            const qty = item.quantity || 1;
+            const lineTotal = item.price * qty;
+
+            const priceWidget = isEditing
+                ? `
+                    <div onclick="event.stopPropagation()" class="flex items-center gap-1">
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                inputmode="decimal" 
+                                id="inline-price-${item.id}" 
+                                value="${item.price.toFixed(2).replace('.', ',')}"
+                                onkeydown="handleInlinePriceKey(event, '${item.id}')"
+                                onblur="commitInlinePriceEdit('${item.id}')"
+                                class="w-20 h-11 pl-2 pr-5 rounded-xl border-2 border-emerald-600 bg-white text-right text-sm font-extrabold text-slate-900 tabular-nums outline-none"
+                            >
+                            <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">€</span>
+                        </div>
+                    </div>
+                `
+                : `
+                    <button 
+                        type="button"
+                        onclick="startInlinePriceEdit(event, '${item.id}')"
+                        aria-label="Editar precio de ${item.name}"
+                        class="native-tap min-h-[44px] px-2.5 rounded-xl flex items-center gap-1 text-xs font-extrabold tabular-nums transition-colors
+                        ${isModified 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800'}"
+                    >
+                        <span>${formatEuro(item.price)}</span>
+                        <i data-lucide="pencil" class="w-3 h-3 opacity-60"></i>
+                    </button>
+                `;
+
+            if (!isCart) {
+                // FILA EN DESPENSA:
+                // - Nunca desaparece al seleccionarse.
+                // - Si `item.inCart` es true, muestra una 'X' roja destacada y estilo seleccionado.
+                const selected = !!item.inCart;
+                return `
+                    <div 
+                        onclick="togglePantrySelection('${item.id}')" 
+                        role="button"
+                        tabindex="0"
+                        aria-pressed="${selected}"
+                        class="card-animate native-tap min-h-[56px] px-3.5 py-2 flex items-center justify-between gap-2.5 cursor-pointer
+                        ${selected 
+                            ? 'bg-rose-50/75 hover:bg-rose-50 border-l-4 border-l-rose-600' 
+                            : 'bg-white hover:bg-slate-50'}"
+                    >
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                            <div class="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors
+                                ${selected 
+                                    ? 'bg-rose-600 text-white shadow-2xs border-2 border-rose-600' 
+                                    : 'border-2 border-slate-300 bg-slate-50 text-slate-300'}">
+                                ${selected 
+                                    ? `<i data-lucide="x" class="w-4 h-4 stroke-[3]"></i>` 
+                                    : `<span class="text-[11px] font-extrabold">X</span>`}
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm leading-snug break-words block ${selected ? 'font-extrabold text-rose-950' : 'font-semibold text-slate-800'}">
+                                    ${item.name}
+                                </span>
+                                ${selected ? `<span class="text-[10px] font-bold uppercase tracking-wider text-rose-600">En el carro · Pulsa X para quitar</span>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            ${priceWidget}
+                            ${item.isCustom ? `
+                                <button type="button" onclick="deleteCustomItem(event, '${item.id}')" aria-label="Eliminar producto" class="native-tap w-10 h-11 rounded-xl text-slate-400 hover:text-rose-600 flex items-center justify-center">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // FILA EN CARRO DE LA COMPRA:
+            // - Al marcar `item.picked`, permanece en el carro tachado y con check de comprado,
+            //   sumándose a la cuenta final.
+            const picked = !!item.picked;
+            return `
+                <div 
+                    onclick="toggleCartPicked('${item.id}')" 
+                    role="button"
+                    tabindex="0"
+                    aria-pressed="${picked}"
+                    class="card-animate native-tap min-h-[64px] px-3.5 py-2.5 flex items-center justify-between gap-2 cursor-pointer
+                    ${picked 
+                        ? 'bg-emerald-50/80 hover:bg-emerald-50/90 border-l-4 border-l-emerald-600' 
+                        : 'bg-white hover:bg-amber-50/40'}"
+                >
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors
+                            ${picked 
+                                ? 'bg-emerald-600 text-white shadow-2xs border-2 border-emerald-600' 
+                                : 'border-2 border-amber-400 bg-amber-50 text-amber-600'}">
+                            ${picked 
+                                ? `<i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>` 
+                                : `<span class="text-xs font-extrabold"></span>`}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm block leading-snug break-words
+                                ${picked 
+                                    ? 'line-through font-bold text-emerald-950/75' 
+                                    : 'font-bold text-slate-900'}">
+                                ${item.name}
+                            </span>
+                            <div class="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                ${priceWidget}
+                                <span class="text-xs font-extrabold tabular-nums ${picked ? 'text-emerald-700' : 'text-slate-600'}">
+                                    ${qty > 1 ? `= ${formatEuro(lineTotal)}` : ''}
+                                </span>
+                                ${picked ? `<span class="text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">Comprado</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botones táctiles - / + de mínimo 44x44px -->
+                    <div onclick="event.stopPropagation()" class="flex items-center bg-white border border-slate-200 rounded-2xl p-0.5 shadow-2xs shrink-0">
+                        <button 
+                            type="button" 
+                            onclick="changeQuantity(event, '${item.id}', -1)" 
+                            aria-label="Quitar una unidad"
+                            class="native-tap w-10 h-10 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100"
+                        >
+                            <i data-lucide="minus" class="w-4 h-4 stroke-[2.5]"></i>
+                        </button>
+                        <span class="w-7 text-center text-sm font-extrabold text-slate-900 tabular-nums">${qty}</span>
+                        <button 
+                            type="button" 
+                            onclick="changeQuantity(event, '${item.id}', 1)" 
+                            aria-label="Añadir una unidad"
+                            class="native-tap w-10 h-10 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100"
+                        >
+                            <i data-lucide="plus" class="w-4 h-4 stroke-[2.5]"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateSummaryMetrics() {
+            const cartItems = state.products.filter(p => p.inCart);
+            const pickedItems = cartItems.filter(p => p.picked);
+
+            const totalUnits = cartItems.reduce((acc, p) => acc + (p.quantity || 1), 0);
+            const estimatedSum = cartItems.reduce((acc, p) => acc + (p.price * (p.quantity || 1)), 0);
+            const pickedSum = pickedItems.reduce((acc, p) => acc + (p.price * (p.quantity || 1)), 0);
+
+            const formattedEstimated = formatEuro(estimatedSum);
+            const formattedPicked = formatEuro(pickedSum);
+
+            // Cabecera y Barra Inferior
+            if (state.currentView === 'cart') {
+                document.getElementById('header-total-label').textContent = 'Cuenta Final';
+                document.getElementById('header-total-badge').textContent = formattedPicked;
+            } else {
+                document.getElementById('header-total-label').textContent = 'Total Carro';
+                document.getElementById('header-total-badge').textContent = formattedEstimated;
+            }
+
+            document.getElementById('nav-cart-label').textContent = `Carro · ${formattedEstimated}`;
+
+            const navBadge = document.getElementById('nav-cart-badge');
+            if (cartItems.length > 0) {
+                navBadge.textContent = cartItems.length;
+                navBadge.classList.remove('hidden');
+            } else {
+                navBadge.classList.add('hidden');
+            }
+
+            // Vista Despensa (siempre muestra todos los productos del catálogo)
+            document.getElementById('pantry-count-pill').textContent = state.products.length;
+            const selectedPill = document.getElementById('pantry-selected-pill');
+            if (cartItems.length > 0) {
+                selectedPill.textContent = `${cartItems.length} con X`;
+                selectedPill.classList.remove('hidden');
+            } else {
+                selectedPill.classList.add('hidden');
+            }
+
+            const anyExpanded = CATEGORIES.some(c => !state.collapsed[`pantry_${c.id}`]);
+            document.getElementById('toggle-collapse-btn').textContent = anyExpanded ? 'Contraer todo' : 'Expandir todo';
+
+            // Vista Carro
+            document.getElementById('cart-picked-total').textContent = formattedPicked;
+            document.getElementById('cart-picked-badge').textContent = `${pickedItems.length} / ${cartItems.length} marcados`;
+            document.getElementById('cart-estimated-total').textContent = formattedEstimated;
+            document.getElementById('cart-units-badge').textContent = `${cartItems.length} prod. (${totalUnits} uds.)`;
+
+            const saveTicketBtn = document.getElementById('save-ticket-btn');
+            saveTicketBtn.disabled = cartItems.length === 0;
+            saveTicketBtn.classList.toggle('opacity-40', cartItems.length === 0);
+            saveTicketBtn.classList.toggle('cursor-not-allowed', cartItems.length === 0);
+
+            // Contadores de tickets
+            const tCount = state.tickets.length;
+            document.getElementById('tickets-count-label').textContent = tCount;
+            document.getElementById('settings-tickets-count').textContent = tCount;
+        }
+
+        function renderAll() {
+            renderProductsList(false);
+            renderProductsList(true);
+            updateSummaryMetrics();
+            lucide.createIcons();
+        }
+
+        // =========================================================================
+        // 7. MODAL DE TICKETS, TOASTS, MODALES Y BACKUP JSON
+        // =========================================================================
+        function openTicketsModal() {
+            triggerHaptic(12);
+            renderTicketsModalBody();
+            document.getElementById('tickets-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeTicketsModal() {
+            document.getElementById('tickets-modal').classList.add('hidden');
+        }
+
+        function renderTicketsModalBody() {
+            const body = document.getElementById('tickets-modal-body');
+            if (!state.tickets.length) {
+                body.innerHTML = `
+                    <div class="text-center py-10 px-4">
+                        <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="receipt-text" class="w-7 h-7"></i>
+                        </div>
+                        <p class="text-sm font-bold text-slate-800">Aún no hay tickets guardados</p>
+                        <p class="text-xs text-slate-500 mt-1">Usa el botón <strong>Guardar ticket</strong> dentro del carro para guardar tu compra con fecha y hora.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            body.innerHTML = state.tickets.map(ticket => `
+                <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-extrabold text-slate-900">${ticket.dateLabel} · ${ticket.timeLabel}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${ticket.onlyPicked ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                                    ${ticket.onlyPicked ? 'Marcados comprados' : 'Carro completo'}
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">${ticket.items.length} productos · ${ticket.units} uds.</p>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-base font-extrabold text-emerald-700 tabular-nums mr-1">${formatEuro(ticket.total)}</span>
+                            <button type="button" onclick="downloadSingleTicket('${ticket.id}')" title="Descargar ticket" aria-label="Descargar ticket" class="native-tap w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center justify-center">
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                            </button>
+                            <button type="button" onclick="deleteTicket('${ticket.id}')" title="Borrar ticket" aria-label="Borrar ticket" class="native-tap w-9 h-9 rounded-xl bg-white border border-slate-200 text-rose-500 hover:bg-rose-50 flex items-center justify-center">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-200/70 pt-2 space-y-1 max-h-36 overflow-y-auto">
+                        ${ticket.items.map(it => `
+                            <div class="flex items-center justify-between text-xs text-slate-700 gap-2">
+                                <span class="truncate">${it.quantity > 1 ? `<strong>${it.quantity}x</strong> ` : ''}${it.name}</span>
+                                <span class="font-bold tabular-nums shrink-0">${formatEuro(it.subtotal)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function deleteTicket(ticketId) {
+            triggerHaptic(20);
+            state.tickets = state.tickets.filter(t => t.id !== ticketId);
+            saveState();
+            updateSummaryMetrics();
+            renderTicketsModalBody();
+            lucide.createIcons();
+            showToast('Ticket eliminado', 'warn');
+        }
+
+        function downloadSingleTicket(ticketId) {
+            const ticket = state.tickets.find(t => t.id === ticketId);
+            if (!ticket) return;
+
+            const lines = [
+                'MI COMPRA MERCADONA - TICKET',
+                `Fecha: ${ticket.dateLabel} - Hora: ${ticket.timeLabel}`,
+                '----------------------------------------',
+                ...ticket.items.map(it => `${it.quantity}x ${it.name} -> ${formatEuro(it.subtotal)}`),
+                '----------------------------------------',
+                `TOTAL: ${formatEuro(ticket.total)}`
+            ];
+
+            const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ticket_mercadona_${ticket.createdAt.slice(0, 10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Ticket descargado (.txt)', 'check');
+        }
+
+        function exportAllTicketsJSON() {
+            if (!state.tickets.length) {
+                showToast('No hay tickets para exportar', 'warn');
+                return;
+            }
+            const blob = new Blob([JSON.stringify({ tickets: state.tickets }, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tickets_mercadona_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Tickets exportados en JSON', 'check');
+        }
+
+        let toastTimer = null;
+        function showToast(text, type = 'check') {
+            const toast = document.getElementById('toast');
+            const textEl = document.getElementById('toast-text');
+            const iconEl = document.getElementById('toast-icon');
+
+            textEl.textContent = text;
+            if (type === 'cart') {
+                iconEl.className = 'text-rose-400 flex items-center';
+                iconEl.innerHTML = '<i data-lucide="x-circle" class="w-4 h-4"></i>';
+            } else if (type === 'tag') {
+                iconEl.className = 'text-sky-400 flex items-center';
+                iconEl.innerHTML = '<i data-lucide="tag" class="w-4 h-4"></i>';
+            } else if (type === 'ticket') {
+                iconEl.className = 'text-amber-400 flex items-center';
+                iconEl.innerHTML = '<i data-lucide="receipt-text" class="w-4 h-4"></i>';
+            } else if (type === 'warn') {
+                iconEl.className = 'text-rose-400 flex items-center';
+                iconEl.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4"></i>';
+            } else {
+                iconEl.className = 'text-emerald-400 flex items-center';
+                iconEl.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4"></i>';
+            }
+
+            lucide.createIcons();
+            toast.classList.remove('opacity-0', '-translate-y-2');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+            }, 2000);
+        }
+
+        function openAddModal() {
+            triggerHaptic(12);
+            const sel = document.getElementById('new-cat');
+            sel.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-price').value = '';
+            document.getElementById('add-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('new-name').focus(), 80);
+        }
+
+        function closeAddModal() {
+            document.getElementById('add-modal').classList.add('hidden');
+        }
+
+        function handleAddProduct(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-name').value.trim();
+            if (!name) return;
+
+            const category = document.getElementById('new-cat').value;
+            const price = parseEuro(document.getElementById('new-price').value);
+            const inCart = document.getElementById('new-tocart').checked;
+
+            state.products.unshift({
+                id: 'custom_' + Date.now(),
+                name,
+                category,
+                price,
+                defaultPrice: price,
+                quantity: 1,
+                inCart,
+                picked: false,
+                isCustom: true
+            });
+
+            triggerHaptic(20);
+            saveState();
+            closeAddModal();
+            renderAll();
+            showToast(`Añadido: ${name}`, inCart ? 'cart' : 'check');
+        }
+
+        let onConfirmCallback = null;
+        function openConfirmModal(title, desc, btnLabel, btnClass, callback) {
+            triggerHaptic(15);
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-desc').textContent = desc;
+            const btn = document.getElementById('confirm-ok-btn');
+            btn.textContent = btnLabel;
+            btn.className = `native-tap min-h-[48px] rounded-2xl text-white font-bold text-sm ${btnClass}`;
+            onConfirmCallback = callback;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            onConfirmCallback = null;
+        }
+
+        document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+            if (onConfirmCallback) onConfirmCallback();
+            closeConfirmModal();
+        });
+
+        function confirmRestorePrices() {
+            openConfirmModal(
+                '¿Restaurar precios originales?',
+                'Se volverán a poner los importes exactos de tus tickets de Mercadona.',
+                'Restaurar precios',
+                'bg-amber-600',
+                () => {
+                    state.products.forEach(p => { p.price = p.defaultPrice; });
+                    saveState();
+                    renderAll();
+                    showToast('Precios originales restaurados', 'tag');
+                }
+            );
+        }
+
+        function confirmResetApp() {
+            openConfirmModal(
+                '¿Restaurar aplicación completa?',
+                'Se borrarán los productos añadidos manualmente, se limpiará la compra y volverán los precios originales (se conservan tus tickets guardados).',
+                'Restaurar todo',
+                'bg-rose-600',
+                () => {
+                    state.products = createDefaultProducts();
+                    state.collapsed = {};
+                    saveState();
+                    renderAll();
+                    showToast('App restaurada correctamente', 'check');
+                }
+            );
+        }
+
+        function exportBackupJSON() {
+            triggerHaptic(15);
+            const payload = JSON.stringify({
+                app: 'MiCompraMercadona',
+                exportedAt: new Date().toISOString(),
+                products: state.products,
+                tickets: state.tickets
+            }, null, 2);
+
+            const blob = new Blob([payload], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `lista_compra_mercadona_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Copia JSON descargada', 'check');
+        }
+
+        function importBackupJSON(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (Array.isArray(parsed.products) && parsed.products.length > 0) {
+                        state.products = parsed.products.map(p => ({
+                            ...p,
+                            quantity: Math.max(1, Number(p.quantity) || 1),
+                            inCart: !!p.inCart,
+                            picked: !!p.picked
+                        }));
+                        if (Array.isArray(parsed.tickets)) {
+                            state.tickets = parsed.tickets;
+                        }
+                        saveState();
+                        renderAll();
+                        showToast('Copia restaurada con éxito', 'check');
+                    } else {
+                        showToast('Archivo JSON no válido', 'warn');
+                    }
+                } catch (_) {
+                    showToast('Error leyendo el archivo', 'warn');
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        // =========================================================================
+        // 8. ARRANQUE INICIAL
+        // =========================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            renderCategoryPills();
+            renderAll();
+        });
+    </script>
+</body>
+</html>
